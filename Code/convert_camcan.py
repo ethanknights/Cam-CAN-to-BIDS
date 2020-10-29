@@ -163,7 +163,7 @@ with tqdm.tqdm(total=len(overview.index), desc='Conversion') as progress_bar:
             "keep_his": False}
 
             # Now actually convert to BIDS.
-            bids_path = BIDSPath(subject=participant[4:], task=exp, datatype='meg',
+            bids_path = BIDSPath(subject=participant[4:], session=exp, task=exp, datatype='meg',
                                  root=output_dir)
             write_raw_bids(raw, bids_path=bids_path,
                            events_data=events,

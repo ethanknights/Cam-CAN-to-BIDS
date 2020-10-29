@@ -31,9 +31,9 @@ overview = pd.DataFrame(columns=[*experiments],
 #            'CC710154': ['passive'],  # Weird triggers (might be fixable)
 #            }
 
-# restart_from = 'CC510534'
+restart_from = 'sub-CC121479'
 # restart_from = participants[-10]
-restart_from = None
+#restart_from = None
 
 # # %% This section stops a sub being processed if they dont have all 3 sessions. 
 #But for main repo we will process all available sessions regardless of nSessions.

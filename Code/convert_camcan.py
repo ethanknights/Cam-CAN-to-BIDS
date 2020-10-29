@@ -10,68 +10,48 @@ from mne_bids import BIDSPath, write_raw_bids, write_anat
 
 mne.set_log_level(verbose=False)
 
-input_dir = pathlib.Path('/storage/store/data/camcan/camcan47/cc700/meg/'
-                         'pipeline/release004/data/aamod_meg_get_fif_00001')
-# output_dir = pathlib.Path('/storage/store2/work/rhochenb/'
-#                           'Data/Cam-CAN/BIDS-new')
-output_dir = pathlib.Path('/storage/store2/data/camcan-bids')
-
-freesurfer_participants_dir = pathlib.Path('/storage/store/data/camcan-mne/'
-                                           'freesurfer/')
-# trans_dir = pathlib.Path('/storage/store/data/camcan-mne/trans/')
-trans_dir = pathlib.Path('/storage/inria/agramfor/camcan_derivatives/'
-                         'trans-krieger')
+input_dir = pathlib.Path('/imaging/camcan/sandbox/ek03/fixCC700/cc700_MEG/scripts/createBIDS_MNEBIDS/BIDS_symlinks')
+output_dir = pathlib.Path('/imaging/camcan/sandbox/ek03/fixCC700/cc700_MEG/scripts/createBIDS_MNEBIDS/BIDS_MNE-BIDS')
 
 participants = sorted([p.parts[-1] for p in input_dir.glob('*')])
 
-experiments = ('rest', 'task', 'passive')
+experiments = ('rest', 'smt', 'passive')
 
 date_sound_card_change = datetime(month=12, day=8, year=2011,
                                   tzinfo=timezone.utc)
 
-overview = pd.DataFrame(columns=['T1', 'trans', *experiments,
-                                 'dataset_complete'],
+overview = pd.DataFrame(columns=[*experiments],
                         index=pd.Index(participants, name='Participant'))
-exclude = {'CC610462': ['task'],
-           'CC512003': ['task'],
-           'CC120208': ['passive'],
-           'CC620685': ['passive'],
-           'CC620044': ['rest'],     # Triggers missing
-           'CC710154': ['passive'],  # Weird triggers (might be fixable)
-           }
+
+# exclude = {'CC610462': ['task'],
+#            'CC512003': ['task'],
+#            'CC120208': ['passive'],
+#            'CC620685': ['passive'],
+#            'CC620044': ['rest'],     # Triggers missing
+#            'CC710154': ['passive'],  # Weird triggers (might be fixable)
+#            }
 
 # restart_from = 'CC510534'
 # restart_from = participants[-10]
 restart_from = None
 
-# %%
-with tqdm.tqdm(total=len(participants), desc='Preparing') as progress_bar:
-    for participant in participants:
-        t1w_fname = (freesurfer_participants_dir / participant / 'mri' /
-                     'T1.mgz')
-        overview.loc[participant, 'T1'] = t1w_fname.exists()
+# # %% This section stops a sub being processed if they dont have all 3 sessions. 
+#But for main repo we will process all available sessions regardless of nSessions.
+#
+# with tqdm.tqdm(total=len(participants), desc='Preparing') as progress_bar:
+#     for participant in participants:
 
-        try:
-            trans_fname = list(
-                trans_dir.glob(f'{participant[2:]}-ve_tasks-??????.fif'))[0]
-            trans_fname_exists = True
-        except IndexError:
-            trans_fname_exists = False
+#         for exp in experiments:
+#             raw_fname = input_dir / participant / exp / f'{exp}_raw.fif'
+#             overview.loc[participant, exp] = raw_fname.exists()
 
-        overview.loc[participant, 'trans'] = trans_fname_exists
+#         del trans_fname_exists, t1w_fname, raw_fname, exp
+#         progress_bar.update()
 
-        for exp in experiments:
-            raw_fname = input_dir / participant / exp / f'{exp}_raw.fif'
-            overview.loc[participant, exp] = raw_fname.exists()
+# for participant, excluded in exclude.items():
+#     overview.loc[participant, excluded] = False
 
-        del trans_fname_exists, t1w_fname, raw_fname, exp
-        progress_bar.update()
-
-for participant, excluded in exclude.items():
-    overview.loc[participant, excluded] = False
-
-
-overview['dataset_complete'] = overview.iloc[:, :-1].all(axis='columns')
+# overview['dataset_complete'] = overview.iloc[:, :-1].all(axis='columns')
 
 # %%
 if restart_from is not None:
@@ -97,18 +77,20 @@ with tqdm.tqdm(total=len(overview.index), desc='Conversion') as progress_bar:
         # msg = f'Participant {participant}: '
 
         progress_bar.set_postfix_str(f'Participant {participant}')
-        if not dataset['dataset_complete']:
-            progress_bar.update()
-            continue
+        # if not dataset['dataset_complete']:
+        #     progress_bar.update()
+        #     continue
 
         for exp in experiments:
-            raw_fname = input_dir / participant / exp / f'{exp}_raw.fif'
-            t1w_fname = (freesurfer_participants_dir / participant / 'mri' /
-                         'T1.mgz')
-            # trans_fname = trans_dir / f'sub-{participant}-trans.fif'
-            trans_fname = list(
-                trans_dir.glob(f'{participant[2:]}-ve_tasks-??????.fif'))[0]
+            raw_fname = input_dir / participant / f'ses-{exp}' / 'meg' / f'{participant}_ses-{exp}_task-{exp}_meg.fif'
+            
+            #Skip missing subject/session
+            if not raw_fname.exists():
+                progress_bar.update()
+                print(f'\nSkipping sub-{participant[4:]} ses-{exp} as non-existent\n')
+                continue
 
+            print(f'\nConverting sub-{participant[4:]} ses-{exp}\n')
             raw = mne.io.read_raw_fif(raw_fname)
 
             # Work around an acquisition bug in STI101: construct a stimulus
@@ -166,7 +148,7 @@ with tqdm.tqdm(total=len(overview.index), desc='Conversion') as progress_bar:
                         assert exp == 'passive'
                         delay = 34  # visual delay
                     elif event[2] in [1, 2, 3]:
-                        assert exp == 'task'
+                        assert exp == 'smt'
                         # take mean between audio and vis
                         delay = (scdelay + 34) // 2
                     elif event[2] in [4, 5]:
@@ -176,25 +158,21 @@ with tqdm.tqdm(total=len(overview.index), desc='Conversion') as progress_bar:
 
                     event[0] += delay
 
+            anonDict = {
+            "daysback": 35240,
+            "keep_his": False}
+
             # Now actually convert to BIDS.
-            bids_path = BIDSPath(subject=participant, task=exp, datatype='meg',
+            bids_path = BIDSPath(subject=participant[4:], task=exp, datatype='meg',
                                  root=output_dir)
             write_raw_bids(raw, bids_path=bids_path,
                            events_data=events,
                            event_id=event_name_to_id_mapping,
+                           anonymize=anonDict,
                            overwrite=True,
                            verbose=False)
 
-            t1w_bids_path = BIDSPath(
-                subject=participant, root=output_dir, acquisition='t1w')
-            write_anat(t1w=t1w_fname,
-                       bids_path=t1w_bids_path,
-                       trans=trans_fname,
-                       raw=raw,
-                       overwrite=True,
-                       verbose=False)
-
-            del bids_path, trans_fname, raw_fname, raw, events
+            del bids_path, raw_fname, raw, events
 
         progress_bar.update()
 

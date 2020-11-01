@@ -32,7 +32,8 @@ overview = pd.DataFrame(columns=[*experiments],
 #            }
 
 #restart_from = 'sub-CC121479'
-restart_from = 'sub-CC710154'
+#restart_from = 'sub-CC710154'
+restart_from = 'sub-CC710176'
 # restart_from = participants[-10]
 #restart_from = None
 

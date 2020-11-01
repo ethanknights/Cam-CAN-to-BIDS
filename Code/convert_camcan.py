@@ -31,7 +31,8 @@ overview = pd.DataFrame(columns=[*experiments],
 #            'CC710154': ['passive'],  # Weird triggers (might be fixable)
 #            }
 
-restart_from = 'sub-CC121479'
+#restart_from = 'sub-CC121479'
+restart_from = 'sub-CC710154'
 # restart_from = participants[-10]
 #restart_from = None
 
